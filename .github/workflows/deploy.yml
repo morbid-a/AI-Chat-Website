@@ -44,7 +44,7 @@ jobs:
 
       # 4. Deploy to Elastic Beanstalk
       - name: Deploy to Elastic Beanstalk
-        uses: einaregilsson/beanstalk-deploy@v24 # Using the latest version
+        uses: einaregilsson/beanstalk-deploy@v22 # CORRECTED: Changed version from v24 to v22
         # CRITICAL: 'with:' must be aligned exactly with 'uses:'
         with:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
