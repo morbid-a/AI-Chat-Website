@@ -1,0 +1,55 @@
+<!-- Updated _Layout.cshtml -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - Echo Chat</title>
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="~/css/site.css" />
+</head>
+@{
+    var theme = Context.Request.Cookies["theme"] ?? "dark";
+    var themeClass = theme == "light" ? "light" : "dark";
+    var nextTheme = themeClass == "dark" ? "light" : "dark";
+    var nextLabel = themeClass == "dark" ? "Light" : "Dark";
+
+    // Detect if current page is Login or Register
+    var hideNavbar = ViewContext.RouteData.Values["controller"].ToString() == "Account";
+}
+
+<body class="@themeClass">
+
+    @if (!hideNavbar)
+    {
+        <header>
+            <nav class="navbar">
+                <div class="navbar-left">
+                    <form asp-controller="Home" asp-action="ToggleTheme" method="post" class="theme-toggle-form">
+                        <button type="submit" name="theme" value="@nextTheme" aria-label="Toggle theme">@nextLabel</button>
+                    </form>
+                </div>
+                <div class="navbar-right">
+                    <form asp-controller="Account" asp-action="Logout" method="post" class="logout-form">
+                        @Html.AntiForgeryToken()
+                        <button type="submit">Logout</button>
+                    </form>
+                </div>
+            </nav>
+        </header>
+    }
+
+    <main role="main" class="container">
+        @RenderBody()
+    </main>
+
+    @RenderSection("Scripts", required: false)
+</body>
+
+</html>
+
+<!-- Login.cshtml unchanged -->
+<!-- Register.cshtml unchanged -->

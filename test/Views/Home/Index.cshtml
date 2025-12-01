@@ -1,0 +1,94 @@
+@model List<ProjectNet.Models.ChatMessage>
+@{
+    ViewData["Title"] = "AI Chat";
+}
+<div class="chat-wrapper">
+    <div class="chat-history" id="chatHistory" aria-live="polite">
+        @if (Model != null && Model.Any())
+        {
+            foreach (var message in Model)
+            {
+                <div class="message @(message.IsUser ? "user-message" : "aimessage")">
+                    <div class="message-header">
+                        <strong class="sender-name">@(message.IsUser ? "You:" :
+                                                "Echo:")</strong>
+                    </div>
+                    <div class="message-content">
+                        @Html.Raw(Html.Encode(message.Content).Replace("\n","<br/>"))
+            </div>
+        </div>
+                }
+        }
+        else
+        {
+            <div class="no-messages">
+                Welcome @Context.Session.GetString("Username") Chat with me!
+            </div>
+        }
+    </div>
+    <form id="chatForm" asp-controller="Chat" asp-action="SendMessage" method="post" class="chat-form">
+        @Html.AntiForgeryToken()
+        <div class="chat-input-box">
+            <textarea id="chatInput" name="message" class="chat-input" placeholder="Type your message..." rows="2"
+                required></textarea>
+        </div>
+        <button type="submit" style="display:none;">Send</button>
+    </form>
+</div>
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const chatForm = document.getElementById('chatForm');
+            const chatInput = document.getElementById('chatInput');
+            const chatHistory = document.getElementById('chatHistory');
+            function scrollToBottom() {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+            // Ensure the history is scrolled to bottom on load
+            scrollToBottom();
+            chatForm.addEventListener('submit', function (e) {
+                e.preventDefault();
+                const message = chatInput.value.trim();
+                if (!message) return;
+                const token =
+                    document.querySelector('input[name="__RequestVerificationToken"]').value;
+                // display user message instantly
+                const userDiv = document.createElement('div');
+                userDiv.className = 'message user-message';
+                userDiv.innerHTML = `
+     <div class="message-header"><strong>You:</strong></div>
+     <div class="message-content"></div>`;
+                userDiv.querySelector('.message-content').textContent = message;
+                chatHistory.appendChild(userDiv);
+                scrollToBottom();
+                chatInput.value = '';
+                fetch('@Url.Action("SendMessage", "Chat")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'RequestVerificationToken': token
+                    },
+                    body: new URLSearchParams({ message: message })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        const aiDiv = document.createElement('div');
+                        aiDiv.className = 'message ai-message';
+                        aiDiv.innerHTML = `
+     <div class="message-header"><strong>Echo:</strong></div>
+     <div class="message-content"></div>`;
+                        aiDiv.querySelector('.message-content').textContent = data.response;
+                        chatHistory.appendChild(aiDiv);
+                        scrollToBottom();
+                    })
+                    .catch(err => console.error('AI Response Failed', err));
+            });
+            chatInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    chatForm.dispatchEvent(new Event('submit'));
+                }
+            });
+        });
+    </script>
+}
