@@ -1,43 +1,56 @@
-# Define a variable for the published directory name
-env:
-  DOTNET_VERSION: '8.0.x' # Set this to match your project's target framework
-  PROJECT_NAME: 'YourProjectName.csproj' # CRITICAL: Change this to your actual .csproj file name!
+name: .NET CI/CD to Elastic Beanstalk
 
-steps:
-  - name: Checkout code
-    uses: actions/checkout@v4
+# Trigger the workflow on pushes to the main branch or manual dispatch
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
 
-  # 1. Setup the .NET environment
-  - name: Setup .NET SDK
-    uses: actions/setup-dotnet@v4
-    with:
-      dotnet-version: ${{ env.DOTNET_VERSION }}
-
-  # 2. Restore dependencies and Build the project
-  - name: Restore dependencies
-    run: dotnet restore
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
     
-  # 3. Publish the application to a deployment directory
-  - name: Publish and Zip Application
-    run: |
-      # Use dotnet publish to compile and create the ready-to-deploy package
-      # The output folder 'deploy_package' will contain the DLLs, web.config, etc.
-      dotnet publish ${{ env.PROJECT_NAME }} -c Release -o ./deploy_package
+    # Define variables for easy configuration
+    env:
+      DOTNET_VERSION: '8.0.x' # Set this to match your project's target framework
+      PROJECT_NAME: 'test.csproj' # CRITICAL: Change this to your actual .csproj file name!
       
-      # Zip the CONTENTS of the 'deploy_package' folder
-      # Elastic Beanstalk expects the application root files directly in the ZIP's root.
-      cd deploy_package
-      zip -r ../app.zip .
-      cd .. # Go back to the root directory
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # 4. Deploy to Elastic Beanstalk
-  - name: Deploy to Elastic Beanstalk
-    uses: einaregilsson/beanstalk-deploy@v24 # Using the latest version
-    with:
-      aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      application_name: "Echo"  # <-- UPDATE THIS
-      environment_name: "Echo-env"  # <-- UPDATE THIS
-      region: "YOUR_AWS_REGION"            # <-- UPDATE THIS
-      version_label: ${{ github.sha }}
-      zip_file: "app.zip"
+      # 1. Setup the .NET environment
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      # 2. Restore dependencies and Build the project
+      - name: Restore dependencies and Build
+        run: dotnet restore
+        
+      # 3. Publish the application to a deployment directory and zip the contents
+      - name: Publish and Zip Application
+        run: |
+          # Use dotnet publish to compile and create the ready-to-deploy package
+          # The output folder 'deploy_package' will contain the DLLs, web.config, etc.
+          dotnet publish ${{ env.PROJECT_NAME }} -c Release -o ./deploy_package
+          
+          # Elastic Beanstalk expects the application root files directly in the ZIP's root.
+          cd deploy_package
+          zip -r ../app.zip .
+          cd .. # Go back to the root directory
+
+      # 4. Deploy to Elastic Beanstalk
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v24 # Using the latest version
+        # CRITICAL: 'with:' must be aligned exactly with 'uses:'
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: "Echo"
+          environment_name: "Echo-env"
+          region: "us-east-1"
+          version_label: ${{ github.sha }}
+          zip_file: "app.zip"
