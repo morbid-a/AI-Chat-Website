@@ -1,36 +1,43 @@
-name: Deploy to AWS Elastic Beanstalk
+# Define a variable for the published directory name
+env:
+  DOTNET_VERSION: '8.0.x' # Set this to match your project's target framework
+  PROJECT_NAME: 'YourProjectName.csproj' # CRITICAL: Change this to your actual .csproj file name!
 
-on:
-  push:
-    branches:
-      - main  # or your deployment branch
+steps:
+  - name: Checkout code
+    uses: actions/checkout@v4
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+  # 1. Setup the .NET environment
+  - name: Setup .NET SDK
+    uses: actions/setup-dotnet@v4
+    with:
+      dotnet-version: ${{ env.DOTNET_VERSION }}
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+  # 2. Restore dependencies and Build the project
+  - name: Restore dependencies
+    run: dotnet restore
+    
+  # 3. Publish the application to a deployment directory
+  - name: Publish and Zip Application
+    run: |
+      # Use dotnet publish to compile and create the ready-to-deploy package
+      # The output folder 'deploy_package' will contain the DLLs, web.config, etc.
+      dotnet publish ${{ env.PROJECT_NAME }} -c Release -o ./deploy_package
+      
+      # Zip the CONTENTS of the 'deploy_package' folder
+      # Elastic Beanstalk expects the application root files directly in the ZIP's root.
+      cd deploy_package
+      zip -r ../app.zip .
+      cd .. # Go back to the root directory
 
-      - name: Set up Node.js  # if your app is Node, skip/change if other
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-
-      - name: Install dependencies
-        run: npm install   # skip/change if not Node
-
-      - name: Build
-        run: npm run build  # skip/change if not Node
-
-      - name: Deploy to Elastic Beanstalk
-        uses: einaregilsson/beanstalk-deploy@v21
-        with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: "YOUR_EB_APP_NAME"
-          environment_name: "YOUR_EB_ENV_NAME"
-          region: "YOUR_AWS_REGION"
-          version_label: ${{ github.sha }}
-          zip_file: "YOUR_APP_ZIP_PATH"  # optional if your Action zips automatically
+  # 4. Deploy to Elastic Beanstalk
+  - name: Deploy to Elastic Beanstalk
+    uses: einaregilsson/beanstalk-deploy@v24 # Using the latest version
+    with:
+      aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      application_name: "Echo"  # <-- UPDATE THIS
+      environment_name: "Echo-env"  # <-- UPDATE THIS
+      region: "YOUR_AWS_REGION"            # <-- UPDATE THIS
+      version_label: ${{ github.sha }}
+      zip_file: "app.zip"
