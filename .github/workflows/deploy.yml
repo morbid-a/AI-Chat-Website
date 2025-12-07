@@ -13,36 +13,32 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '8.0.x' # Uses the latest 8.0 patch version
 
-      - name: Publish (framework-dependent)
+      - name: Publish .NET (Framework-Dependent)
+        # CRITICAL: Path is confirmed correct from your file structure image.
         run: |
-          dotnet publish test/test.csproj -c Release -o deploy_output
+          dotnet publish test/test.csproj -c Release -o deploy_output /p:SelfContained=false /p:PublishReadyToRun=true
 
       - name: Prepare package (Procfile + zip)
         run: |
           set -e
           cd deploy_output
-
-          echo "Publish output:"
-          ls -la
-
-          # Find the app DLL (first one). If you built self-contained you'd find a native exe instead.
-          dll=$(ls *.dll 2>/dev/null | head -n1 || true)
-          exe=$(find . -maxdepth 1 -type f ! -name "*.*" -printf "%f\n" | head -n1 || true)
-
-          if [ -n "$exe" ] && [ "$exe" != "Procfile" ]; then
-            echo "web: ./$exe" > Procfile
-            chmod +x "$exe" || true
-          elif [ -n "$dll" ]; then
-            echo "web: dotnet $dll" > Procfile
-          else
-            echo "ERROR: publish produced no exe or dll. Listing files for debugging:"
+          
+          APP_DLL="test.dll" # Confirmed DLL name based on project name
+          
+          # CRITICAL: Verify the DLL exists before creating the Procfile
+          if [ ! -f "$APP_DLL" ]; then
+            echo "ERROR: Expected DLL $APP_DLL not found. Check if the project name is truly 'test'."
             ls -la
             exit 1
           fi
 
-          # Zip contents so files are at the ZIP root (required by EB)
+          # CRITICAL: Create Procfile telling EB to use the standard 'dotnet' command
+          echo "web: dotnet $APP_DLL" > Procfile
+
+          # CRITICAL FIX: Zip contents from current directory (deploy_output)
+          # so files are at the ZIP root (required by EB).
           zip -r ../deploy.zip .
 
       - name: Configure AWS Credentials
@@ -59,6 +55,7 @@ jobs:
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: Echo
           environment_name: Echo-env
+          # FIX: Ensures version is unique to prevent the "Version already exists" error
           version_label: "github-v${{ github.run_number }}-${{ github.sha }}"
           region: ${{ secrets.AWS_REGION }}
           deployment_package: deploy.zip
