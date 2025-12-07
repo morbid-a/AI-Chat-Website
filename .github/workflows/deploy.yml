@@ -15,30 +15,33 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Publish (framework-dependent)
+      - name: Publish .NET (Self-Contained Linux)
+        # We force a linux-x64 build that includes the runtime.
         run: |
-          dotnet restore test/test.csproj
-          dotnet publish test/test.csproj -c Release -o deploy_output
+          dotnet publish test/test.csproj -c Release -r linux-x64 --self-contained true -o deploy_output /p:PublishReadyToRun=true
 
       - name: Prepare package (Procfile + zip)
         run: |
           set -e
           cd deploy_output
-          echo "Publish output:"; ls -la
-
-          dll=$(ls *.dll 2>/dev/null | head -n1 || true)
-          if [ -z "$dll" ]; then
-            echo "ERROR: no dll found in deploy_output"; ls -la; exit 1
+          
+          # Since it is self-contained, the main file is an executable named 'test' (no extension)
+          APP_EXE="test"
+          
+          if [ ! -f "$APP_EXE" ]; then
+            echo "ERROR: Expected executable '$APP_EXE' not found. Listing files:"
+            ls -la
+            exit 1
           fi
 
-          echo "web: dotnet $dll" > Procfile
-          echo "Procfile contents:"; cat Procfile
+          # CRITICAL: Grant permission to run the file
+          chmod +x $APP_EXE
 
-          # Zip the contents so EB finds files at the ZIP root
+          # CRITICAL: Create Procfile pointing to the EXECUTABLE, not 'dotnet'
+          echo "web: ./$APP_EXE" > Procfile
+
+          # Zip contents so files are at the ZIP root
           zip -r ../deploy.zip .
-
-      - name: Show package contents (debug)
-        run: unzip -l deploy.zip
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
