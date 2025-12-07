@@ -15,17 +15,19 @@ jobs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.0' # IMPORTANT: Match your project's .NET version!
+        dotnet-version: '8.0.0'
 
     # 2. Build and Publish the Application
     - name: Publish .NET
       run: |
-        # Change 'YourProject.csproj' to your actual project file name
-        dotnet publish test.csproj -c Release -o deploy_output
+        # Use your actual project file name without brackets
+        dotnet publish Echo.csproj -c Release -o deploy_output
 
-    # 3. Zip the published files for Beanstalk
+    # 3. Zip the published files for Beanstalk (CRITICAL FIX: Ensures files are at ZIP root)
     - name: Create Deployment Package
-      run: zip -r deploy.zip deploy_output/*
+      run: |
+        cd deploy_output
+        zip -r ../deploy.zip . 
 
     # 4. Configure AWS Credentials for Deployment
     - name: Configure AWS Credentials
@@ -35,11 +37,11 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    # 5. Deploy to Elastic Beanstalk
+    # 5. Deploy to Elastic Beanstalk (YAML SYNTAX FIX: Indentation correction)
     - name: Deploy to Elastic Beanstalk
       uses: aws/elastic-beanstalk-action@v1
       with:
-        application_name: [Echo]
-        environment_name: [Echo-env]
+        application_name: Echo
+        environment_name: Echo-env
         version_label: "github-v${{ github.run_number }}"
         deployment_package: deploy.zip
