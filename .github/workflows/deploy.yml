@@ -3,7 +3,7 @@ name: Deploy ASP.NET to AWS Elastic Beanstalk
 on:
   push:
     branches:
-      - main 
+      - main
 
 jobs:
   build-and-deploy:
@@ -11,25 +11,52 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # 1. Setup .NET Environment
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x' # Uses the latest safe version of .NET 8
+        dotnet-version: '8.0.x'
 
-    # 2. Build and Publish the Application
-    - name: Publish .NET
+    - name: Restore
+      run: dotnet restore test/test.csproj
+
+    - name: Publish .NET (self-contained for Linux)
       run: |
-        # ⚠️ CRITICAL: Replace 'Echo.csproj' with your ACTUAL .csproj filename
-        dotnet publish test/test.csproj -c Release -o deploy_output  # <--- CHANGE THIS NAME
+        dotnet publish test/test.csproj -c Release -r linux-x64 --self-contained true -o deploy_output /p:PublishReadyToRun=true
 
-    # 3. Zip the published files for Beanstalk
-    - name: Create Deployment Package
+    - name: Prepare Procfile and package
       run: |
         cd deploy_output
-        zip -r ../deploy.zip . 
 
-    # 4. Configure AWS Credentials
+        exe=$(find . -maxdepth 1 -type f ! -name "*.*" -printf "%f\n" | head -n1 || true)
+        dll=$(ls *.dll 2>/dev/null | head -n1 || true)
+
+        echo "Publish output listing:"
+        ls -la
+
+        if [ -n "$exe" ] && [ "$exe" != "Procfile" ]; then
+          echo "Detected native executable: $exe"
+          echo "web: ./$exe" > Procfile
+          chmod +x "$exe" || true
+        elif [ -n "$dll" ]; then
+          echo "No native executable detected, using DLL: $dll"
+          echo "web: dotnet $dll" > Procfile
+        else
+          echo "ERROR: No executable or dll found in publish output. Listing files above for debugging."
+          exit 1
+        fi
+
+        cd ..
+        zip -r deploy.zip deploy_output/*
+
+    - name: Show package contents (debug)
+      run: unzip -l deploy.zip
+
+    - name: Upload deploy.zip as artifact (debug)
+      uses: actions/upload-artifact@v4
+      with:
+        name: deploy-zip
+        path: deploy.zip
+
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -37,14 +64,13 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    # 5. Deploy to Elastic Beanstalk
     - name: Deploy to Elastic Beanstalk
       uses: einaregilsson/beanstalk-deploy@v22
       with:
         aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        application_name: Echo     # <--- Ensure this matches your AWS App Name
-        environment_name: Echo-env # <--- Ensure this matches your AWS Env Name
+        application_name: Echo       # <-- Replace if your app name is different
+        environment_name: Echo-env  # <-- Replace if your environment name is different
         version_label: "github-v${{ github.run_number }}"
         region: ${{ secrets.AWS_REGION }}
         deployment_package: deploy.zip
