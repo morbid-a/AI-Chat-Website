@@ -1,37 +1,35 @@
+name: Deploy ASP.NET to AWS Elastic Beanstalk
+
+on:
+  push:
+    branches:
+      - main 
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
+    # 1. Setup .NET Environment
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '8.0.x' # Uses the latest safe version of .NET 8
 
-    # --- OPTIMIZATION: Combine Restore and Build ---
-    # Running 'dotnet build' implicitly restores packages. 
-    # Using working-directory ensures correct path context for the build.
-    - name: Restore and Build Project
-      run: dotnet build test.csproj -c Release
-      working-directory: test # CRITICAL: Run the build from the project folder
-
-    - name: Publish
-      # We removed --no-build since the build is complete.
-      run: dotnet publish test/test.csproj -c Release -o deploy_output --no-restore
-    
-    # --- REMAINDER OF FILE IS PERFECT ---
-    - name: List publish output
+    # 2. Build and Publish the Application
+    - name: Publish .NET
       run: |
-        echo "Contents of deploy_output:"
-        ls -la deploy_output
-        # inspect for main DLL, runtimeconfig.json, deps.json
+        # ⚠️ CRITICAL: Replace 'Echo.csproj' with your ACTUAL .csproj filename
+        dotnet publish test/test.csproj -c Release -o deploy_output  # <--- CHANGE THIS NAME
 
+    # 3. Zip the published files for Beanstalk
     - name: Create Deployment Package
       run: |
         cd deploy_output
         zip -r ../deploy.zip . 
 
+    # 4. Configure AWS Credentials
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -39,13 +37,14 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    # 5. Deploy to Elastic Beanstalk
     - name: Deploy to Elastic Beanstalk
       uses: einaregilsson/beanstalk-deploy@v22
       with:
         aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        application_name: Echo
-        environment_name: Echo-env
+        application_name: Echo     # <--- Ensure this matches your AWS App Name
+        environment_name: Echo-env # <--- Ensure this matches your AWS Env Name
         version_label: "github-v${{ github.run_number }}"
         region: ${{ secrets.AWS_REGION }}
         deployment_package: deploy.zip
