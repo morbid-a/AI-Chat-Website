@@ -21,7 +21,7 @@ jobs:
     - name: Publish .NET
       run: |
         # Change 'YourProject.csproj' to your actual project file name
-        dotnet publish [YOUR_PROJECT_NAME].csproj -c Release -o deploy_output
+        dotnet publish test.csproj -c Release -o deploy_output
 
     # 3. Zip the published files for Beanstalk
     - name: Create Deployment Package
