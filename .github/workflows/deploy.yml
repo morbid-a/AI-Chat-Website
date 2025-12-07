@@ -20,8 +20,7 @@ jobs:
     # 2. Build and Publish the Application
     - name: Publish .NET
       run: |
-        # Ensure 'Echo.csproj' matches your actual project file name
-        dotnet publish test.csproj -c Release -o deploy_output
+        dotnet publish test/test.csproj -c Release -o deploy_output
 
     # 3. Zip the published files for Beanstalk
     # CRITICAL: We cd into the folder so the DLLs are at the root of the zip
