@@ -1,56 +1,45 @@
-name: .NET CI/CD to Elastic Beanstalk
+name: Deploy ASP.NET to AWS Elastic Beanstalk
 
-# Trigger the workflow on pushes to the main branch or manual dispatch
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      - main # Triggers on every push to the main branch
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    
-    # Define variables for easy configuration
-    env:
-      DOTNET_VERSION: '8.0.x' # Set this to match your project's target framework
-      PROJECT_NAME: 'test.csproj' # CRITICAL: Change this to your actual .csproj file name!
-      
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      # 1. Setup the .NET environment
-      - name: Setup .NET SDK
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+    # 1. Setup .NET Environment
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.0' # IMPORTANT: Match your project's .NET version!
 
-      # 2. Restore dependencies and Build the project
-      - name: Restore dependencies and Build
-        run: dotnet restore
-        
-      # 3. Publish the application to a deployment directory and zip the contents
-      - name: Publish and Zip Application
-        run: |
-          # Use dotnet publish to compile and create the ready-to-deploy package
-          # The output folder 'deploy_package' will contain the DLLs, web.config, etc.
-          dotnet publish ${{ env.PROJECT_NAME }} -c Release -o ./deploy_package
-          
-          # Elastic Beanstalk expects the application root files directly in the ZIP's root.
-          cd deploy_package
-          zip -r ../app.zip .
-          cd .. # Go back to the root directory
+    # 2. Build and Publish the Application
+    - name: Publish .NET
+      run: |
+        # Change 'YourProject.csproj' to your actual project file name
+        dotnet publish [YOUR_PROJECT_NAME].csproj -c Release -o deploy_output
 
-      # 4. Deploy to Elastic Beanstalk
-      - name: Deploy to Elastic Beanstalk
-        uses: einaregilsson/beanstalk-deploy@v22 # CORRECTED: Changed version from v24 to v22
-        # CRITICAL: 'with:' must be aligned exactly with 'uses:'
-        with:
-          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          application_name: "Echo"
-          environment_name: "Echo-env"
-          region: "us-east-1"
-          version_label: ${{ github.sha }}
-          zip_file: "app.zip"
+    # 3. Zip the published files for Beanstalk
+    - name: Create Deployment Package
+      run: zip -r deploy.zip deploy_output/*
+
+    # 4. Configure AWS Credentials for Deployment
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    # 5. Deploy to Elastic Beanstalk
+    - name: Deploy to Elastic Beanstalk
+      uses: aws/elastic-beanstalk-action@v1
+      with:
+        application_name: [Echo]
+        environment_name: [Echo-env]
+        version_label: "github-v${{ github.run_number }}"
+        deployment_package: deploy.zip
