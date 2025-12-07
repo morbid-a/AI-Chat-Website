@@ -39,7 +39,7 @@ jobs:
 
     # 5. Deploy to Elastic Beanstalk (YAML SYNTAX FIX: Indentation correction)
     - name: Deploy to Elastic Beanstalk
-      uses: aws/elastic-beanstalk-action@v1
+      uses: aws/elastic-beanstalk-deploy@v1
       with:
         application_name: Echo
         environment_name: Echo-env
