@@ -1,10 +1,3 @@
-name: Deploy ASP.NET to AWS Elastic Beanstalk
-
-on:
-  push:
-    branches:
-      - main
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -17,16 +10,20 @@ jobs:
         dotnet-version: '8.0.x'
 
     - name: Restore
+      # Explicitly restoring ensures the publish step (below) is faster
       run: dotnet restore test/test.csproj
 
     - name: Publish .NET (self-contained for Linux)
+      # Uses the correct flags for a self-contained Linux build
       run: |
         dotnet publish test/test.csproj -c Release -r linux-x64 --self-contained true -o deploy_output /p:PublishReadyToRun=true
 
     - name: Prepare Procfile and package
       run: |
+        # Change to the publish directory to simplify file handling
         cd deploy_output
 
+        # Detect executable vs. DLL for Procfile content
         exe=$(find . -maxdepth 1 -type f ! -name "*.*" -printf "%f\n" | head -n1 || true)
         dll=$(ls *.dll 2>/dev/null | head -n1 || true)
 
@@ -45,8 +42,9 @@ jobs:
           exit 1
         fi
 
-        cd ..
-        zip -r deploy.zip deploy_output/*
+        # CRITICAL FIX: Zip contents from current directory (deploy_output)
+        # to the parent directory (..) so files are at the ZIP root.
+        zip -r ../deploy.zip . 
 
     - name: Show package contents (debug)
       run: unzip -l deploy.zip
@@ -69,8 +67,9 @@ jobs:
       with:
         aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        application_name: Echo       # <-- Replace if your app name is different
-        environment_name: Echo-env  # <-- Replace if your environment name is different
-        version_label: "github-v${{ github.run_number }}"
+        application_name: Echo
+        environment_name: Echo-env
+        # FIX: Ensure version label is unique for every run
+        version_label: "github-v${{ github.run_number }}-${{ github.sha }}" 
         region: ${{ secrets.AWS_REGION }}
         deployment_package: deploy.zip
