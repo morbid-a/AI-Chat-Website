@@ -20,16 +20,18 @@ jobs:
     # 2. Build and Publish the Application
     - name: Publish .NET
       run: |
-        # Use your actual project file name without brackets
+        # Ensure 'Echo.csproj' matches your actual project file name
         dotnet publish Echo.csproj -c Release -o deploy_output
 
-    # 3. Zip the published files for Beanstalk (CRITICAL FIX: Ensures files are at ZIP root)
+    # 3. Zip the published files for Beanstalk
+    # CRITICAL: We cd into the folder so the DLLs are at the root of the zip
     - name: Create Deployment Package
       run: |
         cd deploy_output
         zip -r ../deploy.zip . 
 
-    # 4. Configure AWS Credentials for Deployment
+    # 4. Configure AWS Credentials
+    # This sets up the environment for AWS CLI commands
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
@@ -37,11 +39,15 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
-    # 5. Deploy to Elastic Beanstalk (YAML SYNTAX FIX: Indentation correction)
+    # 5. Deploy to Elastic Beanstalk
+    # FIX: Using the correct community action (einaregilsson/beanstalk-deploy)
     - name: Deploy to Elastic Beanstalk
-      uses: aws/elastic-beanstalk-deploy@v1
+      uses: einaregilsson/beanstalk-deploy@v22
       with:
+        aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         application_name: Echo
         environment_name: Echo-env
         version_label: "github-v${{ github.run_number }}"
+        region: ${{ secrets.AWS_REGION }}
         deployment_package: deploy.zip
