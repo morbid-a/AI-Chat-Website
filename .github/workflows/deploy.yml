@@ -2,80 +2,63 @@ name: Deploy ASP.NET to AWS Elastic Beanstalk
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
 
-    - name: Restore
-      # Explicitly restoring ensures the publish step (below) is faster
-      run: dotnet restore test/test.csproj
+      - name: Publish (framework-dependent)
+        run: |
+          dotnet publish test/test.csproj -c Release -o deploy_output
 
-    - name: Publish .NET (self-contained for Linux)
-      # Uses the correct flags for a self-contained Linux build
-      run: |
-        dotnet publish test/test.csproj -c Release -r linux-x64 --self-contained true -o deploy_output /p:PublishReadyToRun=true
+      - name: Prepare package (Procfile + zip)
+        run: |
+          set -e
+          cd deploy_output
 
-    - name: Prepare Procfile and package
-      run: |
-        # Change to the publish directory to simplify file handling
-        cd deploy_output
+          echo "Publish output:"
+          ls -la
 
-        # Detect executable vs. DLL for Procfile content
-        exe=$(find . -maxdepth 1 -type f ! -name "*.*" -printf "%f\n" | head -n1 || true)
-        dll=$(ls *.dll 2>/dev/null | head -n1 || true)
+          # Find the app DLL (first one). If you built self-contained you'd find a native exe instead.
+          dll=$(ls *.dll 2>/dev/null | head -n1 || true)
+          exe=$(find . -maxdepth 1 -type f ! -name "*.*" -printf "%f\n" | head -n1 || true)
 
-        echo "Publish output listing:"
-        ls -la
+          if [ -n "$exe" ] && [ "$exe" != "Procfile" ]; then
+            echo "web: ./$exe" > Procfile
+            chmod +x "$exe" || true
+          elif [ -n "$dll" ]; then
+            echo "web: dotnet $dll" > Procfile
+          else
+            echo "ERROR: publish produced no exe or dll. Listing files for debugging:"
+            ls -la
+            exit 1
+          fi
 
-        if [ -n "$exe" ] && [ "$exe" != "Procfile" ]; then
-          echo "Detected native executable: $exe"
-          echo "web: ./$exe" > Procfile
-          chmod +x "$exe" || true
-        elif [ -n "$dll" ]; then
-          echo "No native executable detected, using DLL: $dll"
-          echo "web: dotnet $dll" > Procfile
-        else
-          echo "ERROR: No executable or dll found in publish output. Listing files above for debugging."
-          exit 1
-        fi
+          # Zip contents so files are at the ZIP root (required by EB)
+          zip -r ../deploy.zip .
 
-        # CRITICAL FIX: Zip contents from current directory (deploy_output)
-        # to the parent directory (..) so files are at the ZIP root.
-        zip -r ../deploy.zip . 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
-    - name: Show package contents (debug)
-      run: unzip -l deploy.zip
-
-    - name: Upload deploy.zip as artifact (debug)
-      uses: actions/upload-artifact@v4
-      with:
-        name: deploy-zip
-        path: deploy.zip
-
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
-
-    - name: Deploy to Elastic Beanstalk
-      uses: einaregilsson/beanstalk-deploy@v22
-      with:
-        aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        application_name: Echo
-        environment_name: Echo-env
-        # FIX: Ensure version label is unique for every run
-        version_label: "github-v${{ github.run_number }}-${{ github.sha }}" 
-        region: ${{ secrets.AWS_REGION }}
-        deployment_package: deploy.zip
+      - name: Deploy to Elastic Beanstalk
+        uses: einaregilsson/beanstalk-deploy@v22
+        with:
+          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          application_name: Echo
+          environment_name: Echo-env
+          version_label: "github-v${{ github.run_number }}-${{ github.sha }}"
+          region: ${{ secrets.AWS_REGION }}
+          deployment_package: deploy.zip
